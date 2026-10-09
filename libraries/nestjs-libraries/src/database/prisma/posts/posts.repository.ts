@@ -63,6 +63,67 @@ export class PostsRepository {
     });
   }
 
+  findDueQueuedPosts() {
+    return this._post.model.post.findMany({
+      where: {
+        integration: {
+          refreshNeeded: false,
+          inBetweenSteps: false,
+          disabled: false,
+          deletedAt: null,
+        },
+        state: 'QUEUE',
+        deletedAt: null,
+        parentPostId: null,
+        publishDate: {
+          lte: dayjs.utc().toDate(),
+        },
+        publishLockAt: null,
+      },
+      select: {
+        id: true,
+        organizationId: true,
+        publishDate: true,
+      },
+      orderBy: {
+        publishDate: 'asc',
+      },
+      take: 20,
+    });
+  }
+
+  claimPostForPublish(id: string) {
+    return this._post.model.post.updateMany({
+      where: {
+        id,
+        state: 'QUEUE',
+        deletedAt: null,
+        parentPostId: null,
+        publishLockAt: null,
+      },
+      data: {
+        publishLockAt: new Date(),
+      },
+    });
+  }
+
+  findStalePublishLocks(staleBefore: Date) {
+    return this._post.model.post.findMany({
+      where: {
+        state: 'QUEUE',
+        deletedAt: null,
+        parentPostId: null,
+        publishLockAt: {
+          lt: staleBefore,
+        },
+      },
+      select: {
+        id: true,
+        organizationId: true,
+      },
+    });
+  }
+
   getOldPosts(orgId: string, date: string) {
     return this._post.model.post.findMany({
       where: {
@@ -515,6 +576,9 @@ export class PostsRepository {
       },
       data: {
         state,
+        ...(state === 'QUEUE' || state === 'DRAFT'
+          ? { publishLockAt: null }
+          : {}),
         ...(err
           ? { error: typeof err === 'string' ? err : JSON.stringify(err) }
           : {}),

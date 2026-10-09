@@ -4,7 +4,6 @@ import {
   AuthTokenDetails,
   PendingCheckResponse,
 } from '@gitroom/nestjs-libraries/integrations/social/social.integrations.interface';
-import { ApplicationFailure } from '@temporalio/activity';
 import { setHeartbeatDetails } from '@gitroom/nestjs-libraries/temporal/temporal.heartbeat';
 import {
   getSsrfSafeAxios,
@@ -58,6 +57,26 @@ export function truncateForTemporal(value: any, max: number): string {
   }
 
   return `${str.slice(0, max)}… [truncated ${str.length - max} chars]`;
+}
+
+export class ApplicationFailure extends Error {
+  public readonly type: string;
+  public readonly nonRetryable: boolean;
+  public readonly details: unknown[];
+
+  constructor(
+    message: string,
+    type: string,
+    nonRetryable = true,
+    details: unknown[] = []
+  ) {
+    super(message);
+    this.name = 'ApplicationFailure';
+    this.type = type;
+    this.nonRetryable = nonRetryable;
+    this.details = details;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
 }
 
 export class RefreshToken extends ApplicationFailure {

@@ -1,7 +1,6 @@
 import { HttpException, Injectable } from '@nestjs/common';
 import { Organization } from '@prisma/client';
-import { ApplicationFailure, TypedSearchAttributes } from '@temporalio/common';
-import { TemporalService } from 'nestjs-temporal-core';
+import { ApplicationFailure } from '@gitroom/nestjs-libraries/integrations/social.abstract';
 import { ClippingRepository } from '@gitroom/nestjs-libraries/database/prisma/clipping/clipping.repository';
 import { ClippingDto } from '@gitroom/nestjs-libraries/dtos/clipping/clipping.dto';
 import { UploadFactory } from '@gitroom/nestjs-libraries/upload/upload.factory';
@@ -17,7 +16,6 @@ import { PostsService } from '@gitroom/nestjs-libraries/database/prisma/posts/po
 import { MediaService } from '@gitroom/nestjs-libraries/database/prisma/media/media.service';
 import { OpenaiService } from '@gitroom/nestjs-libraries/openai/openai.service';
 import { DeepgramService } from '@gitroom/nestjs-libraries/deepgram/deepgram.service';
-import { organizationId } from '@gitroom/nestjs-libraries/temporal/temporal.search.attribute';
 import { truncateForTemporal } from '@gitroom/nestjs-libraries/integrations/social.abstract';
 import { makeId } from '@gitroom/nestjs-libraries/services/make.is';
 import { randomBytes } from 'crypto';
@@ -50,10 +48,6 @@ const MIN_CLIP_SECONDS = 10;
 const MAX_CLIP_SECONDS = 90;
 // Longer than this no plan pays for, and the transcript stops fitting one prompt
 const MAX_SOURCE_MINUTES = 180;
-// Every clipping costs real money before its minutes are charged, so an
-// organization runs one at a time and only so many a day
-const MAX_RUNNING = 1;
-const MAX_STARTS_PER_DAY = 20;
 // A workflow that died (terminated, a database outage outliving its retries)
 // leaves its record running forever; after this long it is closed and refunded
 const STALE_HOURS = 4;
@@ -76,8 +70,7 @@ export class ClippingService {
     private _postsService: PostsService,
     private _mediaService: MediaService,
     private _openAi: OpenaiService,
-    private _deepgram: DeepgramService,
-    private _temporalService: TemporalService
+    private _deepgram: DeepgramService
   ) {}
 
   // Every intermediate file is a flat key, because removeFile only keeps the
@@ -176,7 +169,10 @@ export class ClippingService {
     );
   }
 
-  async startClipping(org: Organization, body: ClippingDto) {
+  async startClipping(
+    org: Organization,
+    body: ClippingDto
+  ): Promise<{ id: string }> {
     if (
       !this.ingest ||
       !this.clipper ||
@@ -213,83 +209,7 @@ export class ClippingService {
       }
     }
 
-    const client = this._temporalService.client.getRawClient();
-    if (!client) {
-      throw new HttpException('Clipping is not available', 503);
-    }
-
-    // two starts at the same moment would both see nothing running
-    if (!(await ioRedis.set(`clippingStart:${org.id}`, '1', 'EX', 15, 'NX'))) {
-      throw new HttpException('Another clipping is being started', 429);
-    }
-
-    try {
-      return await this.createClipping(org.id, body, integrations, client);
-    } finally {
-      await ioRedis.del(`clippingStart:${org.id}`);
-    }
-  }
-
-  private async createClipping(
-    org: string,
-    body: ClippingDto,
-    integrations: string[],
-    client: NonNullable<ReturnType<TemporalService['client']['getRawClient']>>
-  ) {
-    const running = await this._clippingRepository.getRunningClippings(org);
-    for (const clipping of running.filter((p) => this.isStale(p))) {
-      await this.failClipping(clipping.id, 'The clipping never finished', true);
-    }
-
-    if (running.filter((p) => !this.isStale(p)).length >= MAX_RUNNING) {
-      throw new HttpException(
-        'A clipping is already running, wait for it to finish',
-        429
-      );
-    }
-
-    if (
-      (await this._clippingRepository.countClippingsSince(
-        org,
-        dayjs().subtract(1, 'day').toDate()
-      )) >= MAX_STARTS_PER_DAY
-    ) {
-      throw new HttpException(
-        'Too many clippings were started today, try again tomorrow',
-        429
-      );
-    }
-
-    const clipping = await this._clippingRepository.createClipping(
-      org,
-      body.url,
-      body.clips || 5,
-      body.fit || 'blur',
-      integrations
-    );
-
-    try {
-      await client.workflow.start('clippingWorkflow', {
-        workflowId: `clipping_${clipping.id}`,
-        taskQueue: 'main',
-        args: [{ clippingId: clipping.id }],
-        typedSearchAttributes: new TypedSearchAttributes([
-          {
-            key: organizationId,
-            value: org,
-          },
-        ]),
-      });
-    } catch (err) {
-      // no workflow means nothing will ever flip the status
-      await this._clippingRepository.updateClipping(org, clipping.id, {
-        status: 'failed',
-        error: 'Could not start clipping',
-      });
-      throw new HttpException('Clipping is not available', 503);
-    }
-
-    return { id: clipping.id };
+    throw new HttpException('Clipping is not available', 503);
   }
 
   async getClipping(org: string, id: string) {

@@ -2,10 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { NotificationsRepository } from '@gitroom/nestjs-libraries/database/prisma/notifications/notifications.repository';
 import { EmailService } from '@gitroom/nestjs-libraries/services/email.service';
 import { OrganizationRepository } from '@gitroom/nestjs-libraries/database/prisma/organizations/organization.repository';
-import { TemporalService } from 'nestjs-temporal-core';
-import { TypedSearchAttributes } from '@temporalio/common';
-import { organizationId } from '@gitroom/nestjs-libraries/temporal/temporal.search.attribute';
-
 export type NotificationType = 'success' | 'fail' | 'info';
 
 @Injectable()
@@ -13,8 +9,7 @@ export class NotificationService {
   constructor(
     private _notificationRepository: NotificationsRepository,
     private _emailService: EmailService,
-    private _organizationRepository: OrganizationRepository,
-    private _temporalService: TemporalService
+    private _organizationRepository: OrganizationRepository
   ) {}
 
   getMainPageCount(organizationId: string, userId: string) {
@@ -48,37 +43,6 @@ export class NotificationService {
   ) {
     await this._notificationRepository.createNotification(orgId, message);
     if (!sendEmail) {
-      return;
-    }
-
-    if (digest) {
-      try {
-        await this._temporalService.client
-          .getRawClient()
-          ?.workflow.signalWithStart('digestEmailWorkflow', {
-            workflowId: 'digest_email_workflow_' + orgId,
-            signal: 'email',
-            signalArgs: [
-              [
-                {
-                  title: subject,
-                  message,
-                  type,
-                },
-              ],
-            ],
-            taskQueue: 'main',
-            workflowIdConflictPolicy: 'USE_EXISTING',
-            args: [{ organizationId: orgId }],
-            typedSearchAttributes: new TypedSearchAttributes([
-              {
-                key: organizationId,
-                value: orgId,
-              },
-            ]),
-          });
-      } catch (err) {}
-
       return;
     }
 

@@ -1,11 +1,19 @@
 import {
   AnalyticsData,
   AuthTokenDetails,
+  InboxComment,
+  InboxConversation,
+  InboxListCommentsOptions,
+  InboxMessage,
   PendingCheckResponse,
   PostDetails,
   PostResponse,
   SocialProvider,
 } from '@gitroom/nestjs-libraries/integrations/social/social.integrations.interface';
+import {
+  canPrivateReplyToComment,
+  canReplyToConversation,
+} from '@gitroom/nestjs-libraries/scheduler/scheduler.policy';
 import { makeSecureId } from '@gitroom/nestjs-libraries/services/make.secure.id';
 import dayjs from 'dayjs';
 import {
@@ -25,6 +33,18 @@ import { Rules } from '@gitroom/nestjs-libraries/chat/rules.description.decorato
 
 export const META_GRAPH_API_VERSION = 'v25.0';
 
+export function throwIfMetaGraphError(payload: any, identifier: string) {
+  if (payload?.error) {
+    throw new BadBody(
+      identifier,
+      JSON.stringify(payload),
+      '{}',
+      payload.error.message || 'Unknown Error'
+    );
+  }
+  return payload;
+}
+
 @Rules(
   "Facebook posts can be text only, or include photos or a video. If it's a story, it must have at least one attachment (photo or video), and each media is published as a separate story. Video posts (not stories) can carry an optional title."
 )
@@ -38,6 +58,9 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
     'pages_manage_posts',
     'pages_manage_engagement',
     'pages_read_engagement',
+    'pages_read_user_content',
+    'pages_messaging',
+    'pages_manage_metadata',
     'read_insights',
   ];
   override maxConcurrentJob = 500; // Facebook has reasonable rate limits
@@ -1277,5 +1300,167 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
       console.error('Error fetching Facebook video post analytics:', err);
       return [];
     }
+  }
+
+  async listPostComments(
+    accessToken: string,
+    integration: Integration,
+    options?: InboxListCommentsOptions
+  ): Promise<InboxComment[]> {
+    const since = options?.since ? new Date(options.since).getTime() : 0;
+    const payload = throwIfMetaGraphError(
+      await (
+        await this.fetch(
+          `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${integration.internalId}/feed?fields=id,permalink_url,created_time,comments.limit(50){id,message,created_time,from}&access_token=${accessToken}`
+        )
+      ).json(),
+      this.identifier
+    );
+
+    const comments: InboxComment[] = [];
+    for (const post of payload?.data || []) {
+      for (const comment of post.comments?.data || []) {
+        const createdAt = comment.created_time;
+        if (since && createdAt && new Date(createdAt).getTime() < since) {
+          continue;
+        }
+        comments.push({
+          id: comment.id,
+          mediaId: post.id,
+          mediaPermalink: post.permalink_url,
+          text: comment.message || '',
+          fromId: comment.from?.id,
+          fromName: comment.from?.name,
+          createdAt,
+          canPrivateReply: canPrivateReplyToComment(createdAt),
+        });
+      }
+    }
+    return comments;
+  }
+
+  async replyToComment(
+    accessToken: string,
+    integration: Integration,
+    commentId: string,
+    message: string
+  ): Promise<{ id: string }> {
+    const payload = throwIfMetaGraphError(
+      await (
+        await this.fetch(
+          `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${commentId}/comments?access_token=${accessToken}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message }),
+          }
+        )
+      ).json(),
+      this.identifier
+    );
+    return { id: payload.id };
+  }
+
+  async privateReplyToComment(
+    accessToken: string,
+    integration: Integration,
+    commentId: string,
+    message: string
+  ): Promise<{ id: string }> {
+    const payload = throwIfMetaGraphError(
+      await (
+        await this.fetch(
+          `https://graph.facebook.com/${META_GRAPH_API_VERSION}/me/messages?access_token=${accessToken}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              recipient: { comment_id: commentId },
+              message: { text: message },
+            }),
+          }
+        )
+      ).json(),
+      this.identifier
+    );
+    return { id: payload.message_id || payload.id };
+  }
+
+  async listConversations(
+    accessToken: string,
+    integration: Integration
+  ): Promise<InboxConversation[]> {
+    const payload = throwIfMetaGraphError(
+      await (
+        await this.fetch(
+          `https://graph.facebook.com/${META_GRAPH_API_VERSION}/me/conversations?platform=messenger&fields=id,updated_time,snippet,participants&access_token=${accessToken}`
+        )
+      ).json(),
+      this.identifier
+    );
+
+    return (payload?.data || []).map((conversation: any) => {
+      const participants = conversation.participants?.data || [];
+      const other =
+        participants.find((p: any) => p.id !== integration.internalId) ||
+        participants[0];
+      return {
+        id: conversation.id,
+        updatedAt: conversation.updated_time,
+        participantId: other?.id,
+        participantName: other?.name,
+        snippet: conversation.snippet,
+        canReply: canReplyToConversation(conversation.updated_time),
+      };
+    });
+  }
+
+  async listMessages(
+    accessToken: string,
+    integration: Integration,
+    conversationId: string
+  ): Promise<InboxMessage[]> {
+    const payload = throwIfMetaGraphError(
+      await (
+        await this.fetch(
+          `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${conversationId}?fields=messages.limit(50){id,created_time,from,message}&access_token=${accessToken}`
+        )
+      ).json(),
+      this.identifier
+    );
+
+    return (payload?.messages?.data || []).map((item: any) => ({
+      id: item.id,
+      text: item.message || '',
+      fromId: item.from?.id,
+      fromName: item.from?.name,
+      createdAt: item.created_time,
+      outgoing: item.from?.id === integration.internalId,
+    }));
+  }
+
+  async sendMessage(
+    accessToken: string,
+    integration: Integration,
+    recipientId: string,
+    message: string
+  ): Promise<{ id: string }> {
+    const payload = throwIfMetaGraphError(
+      await (
+        await this.fetch(
+          `https://graph.facebook.com/${META_GRAPH_API_VERSION}/me/messages?access_token=${accessToken}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              recipient: { id: recipientId },
+              message: { text: message },
+            }),
+          }
+        )
+      ).json(),
+      this.identifier
+    );
+    return { id: payload.message_id || payload.id };
   }
 }

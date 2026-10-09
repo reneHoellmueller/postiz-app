@@ -8,7 +8,10 @@ class MockRedis {
     return this.data.get(key);
   }
 
-  async set(key: string, value: any) {
+  async set(key: string, value: any, ...args: any[]) {
+    if (args.includes('NX') && this.data.has(key)) {
+      return null;
+    }
     this.data.set(key, value);
     return 'OK';
   }

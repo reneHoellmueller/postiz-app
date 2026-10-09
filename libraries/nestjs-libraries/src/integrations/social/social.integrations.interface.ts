@@ -121,7 +121,73 @@ export interface ISocialMediaIntegration {
     postDetails: PostDetails[],
     integration: Integration
   ): Promise<PostResponse[]>; // Schedules a new post
+
+  listPostComments?(
+    accessToken: string,
+    integration: Integration,
+    options?: InboxListCommentsOptions
+  ): Promise<InboxComment[]>;
+  replyToComment?(
+    accessToken: string,
+    integration: Integration,
+    commentId: string,
+    message: string
+  ): Promise<{ id: string }>;
+  privateReplyToComment?(
+    accessToken: string,
+    integration: Integration,
+    commentId: string,
+    message: string
+  ): Promise<{ id: string }>;
+  listConversations?(
+    accessToken: string,
+    integration: Integration
+  ): Promise<InboxConversation[]>;
+  listMessages?(
+    accessToken: string,
+    integration: Integration,
+    conversationId: string
+  ): Promise<InboxMessage[]>;
+  sendMessage?(
+    accessToken: string,
+    integration: Integration,
+    recipientId: string,
+    message: string
+  ): Promise<{ id: string }>;
 }
+
+export type InboxListCommentsOptions = {
+  since?: string;
+};
+
+export type InboxComment = {
+  id: string;
+  mediaId?: string;
+  mediaPermalink?: string;
+  text: string;
+  fromId?: string;
+  fromName?: string;
+  createdAt?: string;
+  canPrivateReply: boolean;
+};
+
+export type InboxConversation = {
+  id: string;
+  updatedAt?: string;
+  participantId?: string;
+  participantName?: string;
+  snippet?: string;
+  canReply: boolean;
+};
+
+export type InboxMessage = {
+  id: string;
+  text: string;
+  fromId?: string;
+  fromName?: string;
+  createdAt?: string;
+  outgoing: boolean;
+};
 
 export type PostResponse = {
   id: string; // The db internal id of the post

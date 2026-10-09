@@ -1,5 +1,9 @@
 import {
   AuthTokenDetails,
+  InboxComment,
+  InboxConversation,
+  InboxListCommentsOptions,
+  InboxMessage,
   PostDetails,
   PostResponse,
   SocialProvider,
@@ -33,6 +37,7 @@ export class InstagramStandaloneProvider
     'instagram_business_basic',
     'instagram_business_content_publish',
     'instagram_business_manage_comments',
+    'instagram_business_manage_messages',
     'instagram_business_manage_insights',
   ];
     override maxConcurrentJob = 200; // Instagram standalone has stricter limits
@@ -270,6 +275,88 @@ export class InstagramStandaloneProvider
       accessToken,
       postId,
       date,
+      'graph.instagram.com'
+    );
+  }
+
+  async listPostComments(
+    accessToken: string,
+    integration: Integration,
+    options?: InboxListCommentsOptions
+  ): Promise<InboxComment[]> {
+    return instagramProvider.listPostComments(
+      accessToken,
+      integration,
+      options,
+      'graph.instagram.com'
+    );
+  }
+
+  async replyToComment(
+    accessToken: string,
+    integration: Integration,
+    commentId: string,
+    message: string
+  ): Promise<{ id: string }> {
+    return instagramProvider.replyToComment(
+      accessToken,
+      integration,
+      commentId,
+      message,
+      'graph.instagram.com'
+    );
+  }
+
+  async privateReplyToComment(
+    accessToken: string,
+    integration: Integration,
+    commentId: string,
+    message: string
+  ): Promise<{ id: string }> {
+    return instagramProvider.privateReplyToComment(
+      accessToken,
+      integration,
+      commentId,
+      message,
+      'graph.instagram.com'
+    );
+  }
+
+  async listConversations(
+    accessToken: string,
+    integration: Integration
+  ): Promise<InboxConversation[]> {
+    return instagramProvider.listConversations(
+      accessToken,
+      integration,
+      'graph.instagram.com'
+    );
+  }
+
+  async listMessages(
+    accessToken: string,
+    integration: Integration,
+    conversationId: string
+  ): Promise<InboxMessage[]> {
+    return instagramProvider.listMessages(
+      accessToken,
+      integration,
+      conversationId,
+      'graph.instagram.com'
+    );
+  }
+
+  async sendMessage(
+    accessToken: string,
+    integration: Integration,
+    recipientId: string,
+    message: string
+  ): Promise<{ id: string }> {
+    return instagramProvider.sendMessage(
+      accessToken,
+      integration,
+      recipientId,
+      message,
       'graph.instagram.com'
     );
   }

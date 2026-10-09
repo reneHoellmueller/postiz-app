@@ -45,6 +45,7 @@ model Organization {
   webhooks            Webhooks[]
   oauthApp            OAuthApp[]
   oauthAuthorizations OAuthAuthorization[]
+  replyTemplates      ReplyTemplate[]
 
   @@index([apiKey])
   @@index([streakSince])
@@ -424,6 +425,20 @@ model Signatures {
   @@index([deletedAt])
 }
 
+model ReplyTemplate {
+  id             String       @id @default(uuid())
+  organizationId String
+  name           String
+  body           String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([deletedAt])
+}
+
 model Comments {
   id             String       @id @default(uuid())
   content        String
@@ -478,6 +493,7 @@ model Post {
   lastMessageId              String?
   intervalInDays             Int?
   error                      String?
+  publishLockAt              DateTime?
   createdAt                  DateTime                  @default(now())
   updatedAt                  DateTime                  @updatedAt
   deletedAt                  DateTime?
@@ -509,6 +525,7 @@ model Post {
   @@index([updatedAt])
   @@index([releaseURL])
   @@index([integrationId])
+  @@index([publishLockAt])
 }
 
 model Notifications {

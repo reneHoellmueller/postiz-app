@@ -50,6 +50,10 @@ import { ErrorsRepository } from '@gitroom/nestjs-libraries/database/prisma/erro
 import { ErrorsService } from '@gitroom/nestjs-libraries/database/prisma/errors/errors.service';
 import { AdminStatsRepository } from '@gitroom/nestjs-libraries/database/prisma/admin-stats/admin-stats.repository';
 import { AdminStatsService } from '@gitroom/nestjs-libraries/database/prisma/admin-stats/admin-stats.service';
+import { SchedulerService } from '@gitroom/nestjs-libraries/scheduler/scheduler.service';
+import { PublishRunnerService } from '@gitroom/nestjs-libraries/scheduler/publish.runner.service';
+import { InboxRepository } from '@gitroom/nestjs-libraries/database/prisma/inbox/inbox.repository';
+import { InboxService } from '@gitroom/nestjs-libraries/database/prisma/inbox/inbox.service';
 
 @Global()
 @Module({
@@ -109,6 +113,10 @@ import { AdminStatsService } from '@gitroom/nestjs-libraries/database/prisma/adm
     ErrorsService,
     AdminStatsRepository,
     AdminStatsService,
+    PublishRunnerService,
+    SchedulerService,
+    InboxRepository,
+    InboxService,
   ],
   get exports() {
     return this.providers;

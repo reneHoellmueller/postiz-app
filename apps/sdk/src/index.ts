@@ -92,4 +92,104 @@ export default class Postiz {
       },
     });
   }
+
+  private inboxHeaders() {
+    return {
+      'Content-Type': 'application/json',
+      Authorization: this._apiKey,
+    };
+  }
+
+  inboxComments(integrationId: string, since?: string) {
+    return fetch(
+      `${this._path}/public/v1/inbox/comments?${toQueryString({
+        integrationId,
+        since,
+      })}`,
+      { headers: this.inboxHeaders() }
+    ).then((res) => res.json());
+  }
+
+  inboxReplyComment(
+    integrationId: string,
+    commentId: string,
+    body: { message?: string; templateId?: string }
+  ) {
+    return fetch(
+      `${this._path}/public/v1/inbox/comments/${commentId}/reply?${toQueryString(
+        { integrationId }
+      )}`,
+      {
+        method: 'POST',
+        headers: this.inboxHeaders(),
+        body: JSON.stringify(body),
+      }
+    ).then((res) => res.json());
+  }
+
+  inboxPrivateReply(
+    integrationId: string,
+    commentId: string,
+    body: { message?: string; templateId?: string }
+  ) {
+    return fetch(
+      `${this._path}/public/v1/inbox/comments/${commentId}/private-reply?${toQueryString(
+        { integrationId }
+      )}`,
+      {
+        method: 'POST',
+        headers: this.inboxHeaders(),
+        body: JSON.stringify(body),
+      }
+    ).then((res) => res.json());
+  }
+
+  inboxConversations(integrationId: string) {
+    return fetch(
+      `${this._path}/public/v1/inbox/conversations?${toQueryString({
+        integrationId,
+      })}`,
+      { headers: this.inboxHeaders() }
+    ).then((res) => res.json());
+  }
+
+  inboxMessages(integrationId: string, conversationId: string) {
+    return fetch(
+      `${this._path}/public/v1/inbox/conversations/${conversationId}/messages?${toQueryString(
+        { integrationId }
+      )}`,
+      { headers: this.inboxHeaders() }
+    ).then((res) => res.json());
+  }
+
+  inboxSendMessage(
+    integrationId: string,
+    conversationId: string,
+    body: { recipientId: string; message?: string; templateId?: string }
+  ) {
+    return fetch(
+      `${this._path}/public/v1/inbox/conversations/${conversationId}/messages?${toQueryString(
+        { integrationId }
+      )}`,
+      {
+        method: 'POST',
+        headers: this.inboxHeaders(),
+        body: JSON.stringify(body),
+      }
+    ).then((res) => res.json());
+  }
+
+  inboxTemplates() {
+    return fetch(`${this._path}/public/v1/inbox/templates`, {
+      headers: this.inboxHeaders(),
+    }).then((res) => res.json());
+  }
+
+  inboxCreateTemplate(body: { name: string; body: string }) {
+    return fetch(`${this._path}/public/v1/inbox/templates`, {
+      method: 'POST',
+      headers: this.inboxHeaders(),
+      body: JSON.stringify(body),
+    }).then((res) => res.json());
+  }
 }

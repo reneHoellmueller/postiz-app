@@ -18,6 +18,11 @@ import { PostSettingsTool } from '@gitroom/nestjs-libraries/chat/tools/post.sett
 import { UploadWidgetTool } from '@gitroom/nestjs-libraries/chat/tools/upload.widget.tool';
 import { UploadWidgetTicketTool } from '@gitroom/nestjs-libraries/chat/tools/upload.widget.ticket.tool';
 import { UploadWidgetStatusTool } from '@gitroom/nestjs-libraries/chat/tools/upload.widget.status.tool';
+import { InboxCommentsTool } from '@gitroom/nestjs-libraries/chat/tools/inbox.comments.tool';
+import { InboxReplyCommentTool } from '@gitroom/nestjs-libraries/chat/tools/inbox.reply.comment.tool';
+import { InboxConversationsTool } from '@gitroom/nestjs-libraries/chat/tools/inbox.conversations.tool';
+import { InboxSendMessageTool } from '@gitroom/nestjs-libraries/chat/tools/inbox.send.message.tool';
+import { InboxTemplatesTool } from '@gitroom/nestjs-libraries/chat/tools/inbox.templates.tool';
 
 export const toolList = [
   IntegrationListTool,
@@ -27,6 +32,11 @@ export const toolList = [
   IntegrationSchedulePostTool,
   PostsListTool,
   PostSettingsTool,
+  InboxCommentsTool,
+  InboxReplyCommentTool,
+  InboxConversationsTool,
+  InboxSendMessageTool,
+  InboxTemplatesTool,
   GenerateVideoOptionsTool,
   VideoFunctionTool,
   GenerateVideoTool,
