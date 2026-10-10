@@ -14,11 +14,6 @@ import { PostsService } from '@gitroom/nestjs-libraries/database/prisma/posts/po
 import Parser from 'rss-parser';
 import { IntegrationService } from '@gitroom/nestjs-libraries/database/prisma/integrations/integration.service';
 import { makeId } from '@gitroom/nestjs-libraries/services/make.is';
-import { TemporalService } from 'nestjs-temporal-core';
-import { TypedSearchAttributes } from '@temporalio/common';
-import {
-  organizationId,
-} from '@gitroom/nestjs-libraries/temporal/temporal.search.attribute';
 const parser = new Parser();
 
 interface WorkflowChannelsState {
@@ -62,7 +57,6 @@ const dallePrompt = z.object({
 export class AutopostService {
   constructor(
     private _autopostsRepository: AutopostRepository,
-    private _temporalService: TemporalService,
     private _integrationService: IntegrationService,
     private _postsService: PostsService
   ) {}
@@ -100,35 +94,9 @@ export class AutopostService {
     return data;
   }
 
-  async processCron(active: boolean, orgId: string, id: string) {
-    if (active) {
-      try {
-        return await this._temporalService.client
-          .getRawClient()
-          ?.workflow.start('autoPostWorkflow', {
-            workflowId: `autopost-${id}`,
-            taskQueue: 'main',
-            args: [{ id, immediately: true }],
-            // Keep a running workflow, it reads the autopost settings on every run
-            workflowIdConflictPolicy: 'USE_EXISTING',
-            typedSearchAttributes: new TypedSearchAttributes([
-              {
-                key: organizationId,
-                value: orgId,
-              },
-            ]),
-          });
-      } catch (err) {
-        // Don't fall through and terminate an active autopost
-        return false;
-      }
-    }
-
-    try {
-      return await this._temporalService.terminateWorkflow(`autopost-${id}`);
-    } catch (err) {
-      return false;
-    }
+  async processCron(_active: boolean, _orgId: string, _id: string) {
+    // RSS/autopost cron ran as a Temporal workflow and is not ported.
+    return false;
   }
 
   async deleteAutopost(orgId: string, id: string) {

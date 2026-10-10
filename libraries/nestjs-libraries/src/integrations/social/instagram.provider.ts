@@ -1,11 +1,19 @@
 import {
   AnalyticsData,
   AuthTokenDetails,
+  InboxComment,
+  InboxConversation,
+  InboxListCommentsOptions,
+  InboxMessage,
   PendingCheckResponse,
   PostDetails,
   PostResponse,
   SocialProvider,
 } from '@gitroom/nestjs-libraries/integrations/social/social.integrations.interface';
+import {
+  canPrivateReplyToComment,
+  canReplyToConversation,
+} from '@gitroom/nestjs-libraries/scheduler/scheduler.policy';
 import { makeSecureId } from '@gitroom/nestjs-libraries/services/make.secure.id';
 import { timer } from '@gitroom/helpers/utils/timer';
 import dayjs from 'dayjs';
@@ -18,7 +26,10 @@ import {
 import { InstagramDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/instagram.dto';
 import { Integration } from '@prisma/client';
 import { Rules } from '@gitroom/nestjs-libraries/chat/rules.description.decorator';
-import { META_GRAPH_API_VERSION } from '@gitroom/nestjs-libraries/integrations/social/facebook.provider';
+import {
+  META_GRAPH_API_VERSION,
+  throwIfMetaGraphError,
+} from '@gitroom/nestjs-libraries/integrations/social/facebook.provider';
 import { Tool } from '@gitroom/nestjs-libraries/integrations/tool.decorator';
 import { hasExtension } from '@gitroom/helpers/utils/has.extension';
 
@@ -37,9 +48,12 @@ export class InstagramProvider
     'instagram_basic',
     'pages_show_list',
     'pages_read_engagement',
+    'pages_read_user_content',
+    'pages_messaging',
     'business_management',
     'instagram_content_publish',
     'instagram_manage_comments',
+    'instagram_manage_messages',
     'instagram_manage_insights',
   ];
   override maxConcurrentJob = 400;
@@ -1332,5 +1346,181 @@ export class InstagramProvider
       console.error('Error fetching Instagram post analytics:', err);
       return [];
     }
+  }
+
+  private metaAccessToken(token: string) {
+    return token.split('___')[0];
+  }
+
+  async listPostComments(
+    accessToken: string,
+    integration: Integration,
+    options?: InboxListCommentsOptions,
+    type = 'graph.facebook.com'
+  ): Promise<InboxComment[]> {
+    const token = this.metaAccessToken(accessToken);
+    const since = options?.since ? new Date(options.since).getTime() : 0;
+    const payload = throwIfMetaGraphError(
+      await (
+        await this.fetch(
+          `https://${type}/${META_GRAPH_API_VERSION}/${integration.internalId}/media?fields=id,caption,permalink,timestamp,comments.limit(50){id,text,timestamp,username}&access_token=${token}`
+        )
+      ).json(),
+      this.identifier
+    );
+
+    const comments: InboxComment[] = [];
+    for (const media of payload?.data || []) {
+      for (const comment of media.comments?.data || []) {
+        const createdAt = comment.timestamp || comment.created_time;
+        if (since && createdAt && new Date(createdAt).getTime() < since) {
+          continue;
+        }
+        comments.push({
+          id: comment.id,
+          mediaId: media.id,
+          mediaPermalink: media.permalink,
+          text: comment.text || comment.message || '',
+          fromId: comment.from?.id,
+          fromName: comment.username || comment.from?.name,
+          createdAt,
+          canPrivateReply: canPrivateReplyToComment(createdAt),
+        });
+      }
+    }
+    return comments;
+  }
+
+  async replyToComment(
+    accessToken: string,
+    integration: Integration,
+    commentId: string,
+    message: string,
+    type = 'graph.facebook.com'
+  ): Promise<{ id: string }> {
+    const token = this.metaAccessToken(accessToken);
+    const payload = throwIfMetaGraphError(
+      await (
+        await this.fetch(
+          `https://${type}/${META_GRAPH_API_VERSION}/${commentId}/replies?message=${encodeURIComponent(
+            message
+          )}&access_token=${token}`,
+          { method: 'POST' }
+        )
+      ).json(),
+      this.identifier
+    );
+    return { id: payload.id };
+  }
+
+  async privateReplyToComment(
+    accessToken: string,
+    integration: Integration,
+    commentId: string,
+    message: string,
+    type = 'graph.facebook.com'
+  ): Promise<{ id: string }> {
+    const token = this.metaAccessToken(accessToken);
+    const payload = throwIfMetaGraphError(
+      await (
+        await this.fetch(
+          `https://${type}/${META_GRAPH_API_VERSION}/me/messages?access_token=${token}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              recipient: { comment_id: commentId },
+              message: { text: message },
+            }),
+          }
+        )
+      ).json(),
+      this.identifier
+    );
+    return { id: payload.message_id || payload.id };
+  }
+
+  async listConversations(
+    accessToken: string,
+    integration: Integration,
+    type = 'graph.facebook.com'
+  ): Promise<InboxConversation[]> {
+    const token = this.metaAccessToken(accessToken);
+    const payload = throwIfMetaGraphError(
+      await (
+        await this.fetch(
+          `https://${type}/${META_GRAPH_API_VERSION}/me/conversations?platform=instagram&fields=id,updated_time,snippet,participants&access_token=${token}`
+        )
+      ).json(),
+      this.identifier
+    );
+
+    return (payload?.data || []).map((conversation: any) => {
+      const participants = conversation.participants?.data || [];
+      const other =
+        participants.find((p: any) => p.id !== integration.internalId) ||
+        participants[0];
+      return {
+        id: conversation.id,
+        updatedAt: conversation.updated_time,
+        participantId: other?.id,
+        participantName: other?.username || other?.name,
+        snippet: conversation.snippet,
+        canReply: canReplyToConversation(conversation.updated_time),
+      };
+    });
+  }
+
+  async listMessages(
+    accessToken: string,
+    integration: Integration,
+    conversationId: string,
+    type = 'graph.facebook.com'
+  ): Promise<InboxMessage[]> {
+    const token = this.metaAccessToken(accessToken);
+    const payload = throwIfMetaGraphError(
+      await (
+        await this.fetch(
+          `https://${type}/${META_GRAPH_API_VERSION}/${conversationId}?fields=messages.limit(50){id,created_time,from,to,message}&access_token=${token}`
+        )
+      ).json(),
+      this.identifier
+    );
+
+    return (payload?.messages?.data || []).map((item: any) => ({
+      id: item.id,
+      text: item.message || '',
+      fromId: item.from?.id,
+      fromName: item.from?.username || item.from?.name,
+      createdAt: item.created_time,
+      outgoing: item.from?.id === integration.internalId,
+    }));
+  }
+
+  async sendMessage(
+    accessToken: string,
+    integration: Integration,
+    recipientId: string,
+    message: string,
+    type = 'graph.facebook.com'
+  ): Promise<{ id: string }> {
+    const token = this.metaAccessToken(accessToken);
+    const payload = throwIfMetaGraphError(
+      await (
+        await this.fetch(
+          `https://${type}/${META_GRAPH_API_VERSION}/me/messages?access_token=${token}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              recipient: { id: recipientId },
+              message: { text: message },
+            }),
+          }
+        )
+      ).json(),
+      this.identifier
+    );
+    return { id: payload.message_id || payload.id };
   }
 }
