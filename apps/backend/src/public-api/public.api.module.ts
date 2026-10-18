@@ -10,12 +10,14 @@ import { ExtractContentService } from '@gitroom/nestjs-libraries/openai/extract.
 import { CodesService } from '@gitroom/nestjs-libraries/services/codes.service';
 import { PublicIntegrationsController } from '@gitroom/backend/public-api/routes/v1/public.integrations.controller';
 import { PublicInboxController } from '@gitroom/backend/public-api/routes/v1/public.inbox.controller';
+import { PublicContentCreatorController } from '@gitroom/backend/public-api/routes/v1/public.content.creator.controller';
 import { PublicAuthMiddleware } from '@gitroom/backend/services/auth/public.auth.middleware';
 import { SuperAdminGuard } from '@gitroom/backend/services/auth/super.admin.guard';
 
 const authenticatedController = [
   PublicIntegrationsController,
   PublicInboxController,
+  PublicContentCreatorController,
 ];
 @Module({
   imports: [UploadModule],

@@ -128,6 +128,45 @@
 - In-process scheduler (Postgres; Temporal is not used)
 - Resend (email notifications)
 
+## Content Creator
+
+This fork includes a **Content Creator** endpoint for agents and the post editor. Send a brief (and optional incoming-message context) and get finished German copy back for Instagram/Facebook captions, DM replies, and comment replies. Brand voice lives in one file: `libraries/nestjs-libraries/src/content-creator/brand.prompt.ts` (myguestpage.app).
+
+### Environment
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `OPENAI_API_KEY` | yes (for generation) | — | Azure AI Foundry / OpenAI-compatible API key. Sent as `Authorization: Bearer` and `api-key` (SDK-compatible Azure v1). If unset, `POST /public/v1/content-creator/generate` returns **503** and the app still starts. Never logged. |
+| `OPENAI_API_URL` | no | `https://MyguestpageBrain.services.ai.azure.com/openai/v1` | OpenAI SDK-compatible v1 base URL (Azure AI Foundry). |
+| `CONTENT_CREATOR_MODEL` | no | `gpt-5-mini` | Azure deployment / model name for `responses.create`. |
+| `CONTENT_CREATOR_MAX_TOKENS` | no | `800` | `max_output_tokens` cap per request (cost cap). |
+| `CONTENT_CREATOR_RATE_LIMIT` | no | `20` | Max generate calls per organization per hour. |
+
+Authenticate with the existing public API key (`Authorization` header), the same mechanism as the rest of `/public/v1`.
+
+### Example
+
+```bash
+curl -X POST "$NEXT_PUBLIC_BACKEND_URL/public/v1/content-creator/generate" \
+  -H "Authorization: $POSTIZ_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "post",
+    "brief": "Erklären, dass Gastgeber über den Channel Manager Provision erhalten, wenn ein Partnerangebot verkauft wird.",
+    "audience": "host",
+    "tone": "ruhig und klar",
+    "maxLength": 400
+  }'
+```
+
+Request body: `{ "type": "post"|"dm"|"comment", "brief": string, "context"?: string, "audience"?: "host"|"partner", "tone"?: string, "maxLength"?: number }`.
+
+Response: `{ "text": string, "hashtags"?: string[], "model": string, "usage": { "promptTokens": number, "completionTokens": number, "totalTokens": number } }`.
+
+Generation calls the OpenAI-compatible **Responses API** first (`instructions` = brand system prompt, `input` = briefing/context, `max_output_tokens`; no `temperature`, because gpt-5-mini reasoning deployments may reject it). Chat Completions is only used if Responses is unavailable. Output text is read from `output_text` or, if that is missing, from `output[].content[].text`.
+
+The post editor also has a **Text vom Content Creator** button that calls the session-authenticated `POST /content-creator/generate` with the current draft as the brief.
+
 ## Quick Start
 
 To have the project up and running, please follow the [Quick Start Guide](https://docs.postiz.com/quickstart)

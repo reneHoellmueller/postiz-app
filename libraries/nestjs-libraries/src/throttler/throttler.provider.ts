@@ -13,6 +13,7 @@ export class ThrottlerBehindProxyGuard extends ThrottlerGuard {
     const { url, method } = context.switchToHttp().getRequest<Request>();
     if (
       (method === 'POST' && url.includes('/public/v1/posts')) ||
+      (method === 'POST' && url.includes('/content-creator')) ||
       isPublicComment(method, url)
     ) {
       return super.canActivate(context);
@@ -31,9 +32,13 @@ export class ThrottlerBehindProxyGuard extends ThrottlerGuard {
       return 'ip_' + (forwarded || req.ip || 'unknown');
     }
 
-    return (
-      req.org.id + '_' + (req.url.indexOf('/posts') > -1 ? 'posts' : 'other')
-    );
+    const bucket =
+      req.url.indexOf('/content-creator') > -1
+        ? 'content-creator'
+        : req.url.indexOf('/posts') > -1
+        ? 'posts'
+        : 'other';
+    return req.org.id + '_' + bucket;
   }
 }
 

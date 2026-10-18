@@ -54,6 +54,8 @@ import { SchedulerService } from '@gitroom/nestjs-libraries/scheduler/scheduler.
 import { PublishRunnerService } from '@gitroom/nestjs-libraries/scheduler/publish.runner.service';
 import { InboxRepository } from '@gitroom/nestjs-libraries/database/prisma/inbox/inbox.repository';
 import { InboxService } from '@gitroom/nestjs-libraries/database/prisma/inbox/inbox.service';
+import { ContentCreatorLlmClient } from '@gitroom/nestjs-libraries/content-creator/content.creator.llm.client';
+import { ContentCreatorService } from '@gitroom/nestjs-libraries/content-creator/content.creator.service';
 
 @Global()
 @Module({
@@ -117,6 +119,8 @@ import { InboxService } from '@gitroom/nestjs-libraries/database/prisma/inbox/in
     SchedulerService,
     InboxRepository,
     InboxService,
+    ContentCreatorLlmClient,
+    ContentCreatorService,
   ],
   get exports() {
     return this.providers;
