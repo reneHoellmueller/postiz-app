@@ -8,7 +8,7 @@ import {
 function makeService(complete?: jest.Mock) {
   const llm = {
     complete: complete || jest.fn(),
-    resolveModel: jest.fn().mockReturnValue('gpt-5.6-sol'),
+    resolveModel: jest.fn().mockReturnValue('gpt-5-mini'),
     resolveMaxTokens: jest.fn().mockReturnValue(800),
   };
   const service = new ContentCreatorService(llm as any);
@@ -50,7 +50,7 @@ describe('ContentCreatorService', () => {
     process.env.OPENAI_API_KEY = 'sk-test-secret-key';
     const complete = jest.fn().mockResolvedValue({
       text: '{"text":"Automatisieren Sie Check-in und Meldewesen.","hashtags":["#Ferienwohnung","Gastgeber"]}',
-      model: 'gpt-5.6-sol',
+      model: 'gpt-5-mini',
       usage: { promptTokens: 120, completionTokens: 40, totalTokens: 160 },
     });
     const { service, llm } = makeService(complete);
@@ -66,13 +66,13 @@ describe('ContentCreatorService', () => {
     expect(result).toEqual({
       text: 'Automatisieren Sie Check-in und Meldewesen.',
       hashtags: ['#Ferienwohnung', '#Gastgeber'],
-      model: 'gpt-5.6-sol',
+      model: 'gpt-5-mini',
       usage: { promptTokens: 120, completionTokens: 40, totalTokens: 160 },
     });
     expect(llm.resolveMaxTokens).toHaveBeenCalledWith(280);
     expect(complete).toHaveBeenCalledWith(
       expect.objectContaining({
-        model: 'gpt-5.6-sol',
+        model: 'gpt-5-mini',
         maxTokens: 800,
       })
     );
@@ -90,7 +90,7 @@ describe('ContentCreatorService', () => {
     process.env.OPENAI_API_KEY = 'sk-test-secret-key';
     const complete = jest.fn().mockResolvedValue({
       text: '{"text":"Gern, ich sende Ihnen den Link: https://www.myguestpage.app","hashtags":["#spam"]}',
-      model: 'gpt-5.6-sol',
+      model: 'gpt-5-mini',
       usage: { promptTokens: 10, completionTokens: 8, totalTokens: 18 },
     });
     const { service } = makeService(complete);

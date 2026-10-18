@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 
-export const DEFAULT_CONTENT_CREATOR_MODEL = 'gpt-5.6-sol';
+export const DEFAULT_CONTENT_CREATOR_MODEL = 'gpt-5-mini';
 export const DEFAULT_CONTENT_CREATOR_MAX_TOKENS = 800;
-export const DEFAULT_OPENAI_API_URL = 'https://api.openai.com/v1';
+export const DEFAULT_OPENAI_API_URL =
+  'https://MyguestpageBrain.services.ai.azure.com/openai/v1';
 
 export interface ContentCreatorLlmUsage {
   promptTokens: number;
@@ -35,39 +36,6 @@ export class ContentCreatorLlmClient {
       throw new Error('OPENAI_API_KEY is not set');
     }
 
-    const messages = [
-      { role: 'system', content: request.system },
-      { role: 'user', content: request.user },
-    ];
-    const chatAttempts: Record<string, unknown>[] = [
-      { model: request.model, messages, max_tokens: request.maxTokens },
-      {
-        model: request.model,
-        messages,
-        max_completion_tokens: request.maxTokens,
-      },
-    ];
-
-    let lastFailure: { status: number; raw: string } | undefined;
-    for (const payload of chatAttempts) {
-      const chatResult = await this.postJson(
-        '/chat/completions',
-        payload,
-        apiKey
-      );
-      if (chatResult.ok) {
-        return this.parseChatCompletion(chatResult.body, request.model);
-      }
-
-      lastFailure = { status: chatResult.status, raw: chatResult.raw };
-      if (chatResult.status === 404) {
-        break;
-      }
-      if (chatResult.status !== 400) {
-        throw this.upstreamError(chatResult.status, chatResult.raw);
-      }
-    }
-
     const responsesResult = await this.postJson(
       '/responses',
       {
@@ -82,9 +50,43 @@ export class ContentCreatorLlmClient {
       return this.parseResponsesApi(responsesResult.body, request.model);
     }
 
+    if (responsesResult.status === 401 || responsesResult.status === 403) {
+      throw this.upstreamError(responsesResult.status, responsesResult.raw);
+    }
+
+    const messages = [
+      { role: 'system', content: request.system },
+      { role: 'user', content: request.user },
+    ];
+    const chatAttempts: Record<string, unknown>[] = [
+      { model: request.model, messages, max_tokens: request.maxTokens },
+      {
+        model: request.model,
+        messages,
+        max_completion_tokens: request.maxTokens,
+      },
+    ];
+
+    let lastChatFailure: { status: number; raw: string } | undefined;
+    for (const payload of chatAttempts) {
+      const chatResult = await this.postJson(
+        '/chat/completions',
+        payload,
+        apiKey
+      );
+      if (chatResult.ok) {
+        return this.parseChatCompletion(chatResult.body, request.model);
+      }
+
+      lastChatFailure = { status: chatResult.status, raw: chatResult.raw };
+      if (chatResult.status !== 400) {
+        break;
+      }
+    }
+
     throw this.upstreamError(
-      responsesResult.status || lastFailure?.status || 502,
-      responsesResult.raw || lastFailure?.raw || ''
+      lastChatFailure?.status || responsesResult.status || 502,
+      lastChatFailure?.raw || responsesResult.raw || ''
     );
   }
 
@@ -126,20 +128,27 @@ export class ContentCreatorLlmClient {
     return Math.max(16, Math.min(envMax, Math.ceil(maxLength / 2) + 48));
   }
 
+  private authHeaders(apiKey: string): Record<string, string> {
+    return {
+      Authorization: `Bearer ${apiKey}`,
+      'api-key': apiKey,
+      'Content-Type': 'application/json',
+    };
+  }
+
   private async postJson(
     path: string,
     payload: Record<string, unknown>,
     apiKey: string
   ): Promise<{ ok: boolean; status: number; body: any; raw: string }> {
-    const url = `${this.resolveBaseUrl()}${path.startsWith('/') ? path : `/${path}`}`;
+    const url = `${this.resolveBaseUrl()}${
+      path.startsWith('/') ? path : `/${path}`
+    }`;
     let response: Response;
     try {
       response = await fetch(url, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
+        headers: this.authHeaders(apiKey),
         body: JSON.stringify(payload),
       });
     } catch {
@@ -191,16 +200,7 @@ export class ContentCreatorLlmClient {
     body: any,
     fallbackModel: string
   ): ContentCreatorLlmCompletion {
-    const fromOutputText =
-      typeof body?.output_text === 'string' ? body.output_text : '';
-    const fromOutput = Array.isArray(body?.output)
-      ? body.output
-          .flatMap((item: any) => item?.content || [])
-          .map((part: any) => part?.text)
-          .filter((part: unknown) => typeof part === 'string')
-          .join('\n')
-      : '';
-    const text = (fromOutputText || fromOutput).trim();
+    const text = readResponsesOutputText(body);
     if (!text) {
       throw new Error('Content Creator LLM returned an empty completion');
     }
@@ -269,6 +269,64 @@ export class ContentCreatorLlmClient {
       }`
     );
   }
+}
+
+export function readResponsesOutputText(body: any): string {
+  if (typeof body?.output_text === 'string' && body.output_text.trim()) {
+    return body.output_text.trim();
+  }
+
+  const preferred = collectResponseChunks(body, true);
+  if (preferred) {
+    return preferred;
+  }
+
+  return collectResponseChunks(body, false);
+}
+
+function collectResponseChunks(body: any, outputTextOnly: boolean): string {
+  const chunks: string[] = [];
+  const output = Array.isArray(body?.output) ? body.output : [];
+
+  for (const item of output) {
+    if (item?.type === 'reasoning') {
+      continue;
+    }
+    if (typeof item?.text === 'string' && item.text.trim() && !outputTextOnly) {
+      chunks.push(item.text);
+    }
+
+    const content = item?.content;
+    if (typeof content === 'string' && content.trim()) {
+      chunks.push(content);
+      continue;
+    }
+    if (!Array.isArray(content)) {
+      continue;
+    }
+
+    for (const part of content) {
+      if (typeof part === 'string' && part.trim()) {
+        chunks.push(part);
+        continue;
+      }
+      const type = part?.type;
+      if (
+        outputTextOnly &&
+        type &&
+        type !== 'output_text' &&
+        type !== 'text'
+      ) {
+        continue;
+      }
+      const text = part?.text ?? part?.output_text;
+      if (typeof text === 'string' && text.trim()) {
+        chunks.push(text);
+      }
+    }
+  }
+
+  return chunks.join('\n').trim();
 }
 
 export function parsePositiveInt(
