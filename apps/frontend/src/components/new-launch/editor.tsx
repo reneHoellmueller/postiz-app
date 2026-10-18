@@ -69,6 +69,7 @@ import {
   DelayIcon,
 } from '@gitroom/frontend/components/ui/icons';
 import { DelayComponent } from '@gitroom/frontend/components/new-launch/delay.component';
+import { ContentCreatorButton } from '@gitroom/frontend/components/new-launch/content.creator.button';
 
 const MAX_UPLOAD_SIZE = 1024 * 1024 * 1024; // 1 GB
 
@@ -1035,6 +1036,11 @@ export const Editor: FC<{
                     toolBar={
                       <div className="flex gap-[5px] mobile:gap-[4px]">
                         <SignatureBox editor={editorRef?.current?.editor} />
+                        <ContentCreatorButton
+                          editor={editorRef?.current?.editor}
+                          currentValue={props.value}
+                          maxLength={props.totalChars}
+                        />
                         {editorType !== 'none' && (
                           <>
                             <UText

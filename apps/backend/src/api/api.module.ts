@@ -57,6 +57,7 @@ import { WalletProvider } from '@gitroom/backend/services/auth/providers/wallet.
 import { OauthProvider } from '@gitroom/backend/services/auth/providers/oauth.provider';
 import { StripeController } from '@gitroom/backend/api/routes/stripe.controller';
 import { InboxController } from '@gitroom/backend/api/routes/inbox.controller';
+import { ContentCreatorController } from '@gitroom/backend/api/routes/content.creator.controller';
 
 const authenticatedController = [
   UsersController,
@@ -80,6 +81,7 @@ const authenticatedController = [
   AnnouncementsController,
   AdminController,
   InboxController,
+  ContentCreatorController,
 ];
 @Module({
   imports: [UploadModule],

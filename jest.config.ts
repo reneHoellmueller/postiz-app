@@ -21,6 +21,7 @@ const config: Config = {
   collectCoverageFrom: [
     'libraries/nestjs-libraries/src/scheduler/**/*.ts',
     'libraries/nestjs-libraries/src/database/prisma/inbox/**/*.ts',
+    'libraries/nestjs-libraries/src/content-creator/**/*.ts',
   ],
 };
 
